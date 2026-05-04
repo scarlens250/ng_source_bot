@@ -3,9 +3,16 @@ import os
 import sqlite3
 from datetime import datetime
 
-# Определяем путь к базе данных
-# На хостинге файл будет лежать в той же папке, что и main.py
-DB_PATH = os.path.join(os.path.dirname(__file__), 'bot_database.db')
+# Определяем путь к БД — приоритет у общего хранилища
+SHARED_DIR = os.environ.get('SHARED_DIR', '')
+if SHARED_DIR and os.path.exists(SHARED_DIR):
+    DB_PATH = os.path.join(SHARED_DIR, 'bot_database.db')
+else:
+    # Если общего хранилища нет — используем локальную папку
+    DB_PATH = os.path.join(os.path.dirname(__file__), 'bot_database.db')
+
+# Убеждаемся, что папка для БД существует
+os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
 
 def init_db():
     conn = sqlite3.connect(DB_PATH)
@@ -66,7 +73,6 @@ def init_db():
     conn.close()
     print(f"✅ База данных готова: {DB_PATH}")
 
-# Все остальные функции оставляем без изменений, но везде используем DB_PATH
 def get_user(user_id):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
