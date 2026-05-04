@@ -1,9 +1,14 @@
 # database.py
+import os
 import sqlite3
 from datetime import datetime
 
+# Определяем путь к базе данных
+# На хостинге файл будет лежать в той же папке, что и main.py
+DB_PATH = os.path.join(os.path.dirname(__file__), 'bot_database.db')
+
 def init_db():
-    conn = sqlite3.connect('bot_database.db')
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     
     cursor.execute('''CREATE TABLE IF NOT EXISTS users (
@@ -59,10 +64,11 @@ def init_db():
     
     conn.commit()
     conn.close()
-    print("✅ База данных готова")
+    print(f"✅ База данных готова: {DB_PATH}")
 
+# Все остальные функции оставляем без изменений, но везде используем DB_PATH
 def get_user(user_id):
-    conn = sqlite3.connect('bot_database.db')
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute('SELECT balance, referrer_id, total_spent, total_orders FROM users WHERE user_id = ?', (user_id,))
     res = cursor.fetchone()
@@ -70,21 +76,21 @@ def get_user(user_id):
     return res if res else (0, None, 0, 0)
 
 def update_balance(user_id, amount):
-    conn = sqlite3.connect('bot_database.db')
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute('UPDATE users SET balance = balance + ? WHERE user_id = ?', (amount, user_id))
     conn.commit()
     conn.close()
 
 def set_balance(user_id, amount):
-    conn = sqlite3.connect('bot_database.db')
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute('UPDATE users SET balance = ? WHERE user_id = ?', (amount, user_id))
     conn.commit()
     conn.close()
 
 def update_user_stats(user_id, amount_spent):
-    conn = sqlite3.connect('bot_database.db')
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute('UPDATE users SET total_spent = total_spent + ?, total_orders = total_orders + 1, last_activity = ? WHERE user_id = ?',
                    (amount_spent, datetime.now().isoformat(), user_id))
@@ -92,7 +98,7 @@ def update_user_stats(user_id, amount_spent):
     conn.close()
 
 def add_order(user_id, link, topic, geo, sex, age, has_avatar, count, amount, status, admin_msg_id=None, proof_photo_id=None):
-    conn = sqlite3.connect('bot_database.db')
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute('''INSERT INTO orders (user_id, link, topic, geo, sex, age, has_avatar, count, amount, status, date, admin_msg_id, proof_photo_id)
                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
@@ -103,7 +109,7 @@ def add_order(user_id, link, topic, geo, sex, age, has_avatar, count, amount, st
     return order_id
 
 def update_order_status(order_id, status, admin_id=None):
-    conn = sqlite3.connect('bot_database.db')
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute('''UPDATE orders SET status = ?, moderated_at = ?, moderated_by = ? WHERE order_id = ?''',
                    (status, datetime.now().isoformat(), admin_id, order_id))
@@ -111,21 +117,21 @@ def update_order_status(order_id, status, admin_id=None):
     conn.close()
 
 def update_order_proof(order_id, photo_id):
-    conn = sqlite3.connect('bot_database.db')
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute('UPDATE orders SET proof_photo_id = ? WHERE order_id = ?', (photo_id, order_id))
     conn.commit()
     conn.close()
 
 def update_order_admin_msg(order_id, admin_msg_id):
-    conn = sqlite3.connect('bot_database.db')
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute('UPDATE orders SET admin_msg_id = ? WHERE order_id = ?', (admin_msg_id, order_id))
     conn.commit()
     conn.close()
 
 def get_order(order_id):
-    conn = sqlite3.connect('bot_database.db')
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute('SELECT * FROM orders WHERE order_id = ?', (order_id,))
     res = cursor.fetchone()
@@ -133,8 +139,7 @@ def get_order(order_id):
     return res
 
 def get_pending_order(user_id):
-    """Получает последний заказ пользователя со статусом pending_payment"""
-    conn = sqlite3.connect('bot_database.db')
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute('''SELECT * FROM orders WHERE user_id = ? AND status = 'pending_payment' ORDER BY order_id DESC LIMIT 1''', (user_id,))
     res = cursor.fetchone()
@@ -142,7 +147,7 @@ def get_pending_order(user_id):
     return res
 
 def get_user_orders(user_id):
-    conn = sqlite3.connect('bot_database.db')
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute('''SELECT order_id, link, topic, count, amount, status, date 
                       FROM orders WHERE user_id = ? ORDER BY date DESC LIMIT 10''', (user_id,))
@@ -151,7 +156,7 @@ def get_user_orders(user_id):
     return res
 
 def get_order_stats(user_id):
-    conn = sqlite3.connect('bot_database.db')
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute('SELECT COUNT(*), COALESCE(SUM(amount), 0) FROM orders WHERE user_id = ? AND status IN ("approved", "completed")', (user_id,))
     res = cursor.fetchone()
@@ -159,7 +164,7 @@ def get_order_stats(user_id):
     return res or (0, 0)
 
 def get_config(key):
-    conn = sqlite3.connect('bot_database.db')
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute('SELECT value FROM config WHERE key = ?', (key,))
     res = cursor.fetchone()
@@ -167,7 +172,7 @@ def get_config(key):
     return res[0] if res else None
 
 def set_config(key, value):
-    conn = sqlite3.connect('bot_database.db')
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute('UPDATE config SET value = ?, updated_at = ? WHERE key = ?',
                    (str(value), datetime.now().isoformat(), key))
@@ -175,7 +180,7 @@ def set_config(key, value):
     conn.close()
 
 def is_blocked(user_id):
-    conn = sqlite3.connect('bot_database.db')
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute('SELECT user_id FROM blocked_users WHERE user_id = ?', (user_id,))
     res = cursor.fetchone()
@@ -183,7 +188,7 @@ def is_blocked(user_id):
     return res is not None
 
 def block_user(user_id, blocked=True):
-    conn = sqlite3.connect('bot_database.db')
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     if blocked:
         cursor.execute('INSERT OR IGNORE INTO blocked_users (user_id) VALUES (?)', (user_id,))
@@ -193,7 +198,7 @@ def block_user(user_id, blocked=True):
     conn.close()
 
 def get_all_users():
-    conn = sqlite3.connect('bot_database.db')
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute('SELECT user_id, username, balance, total_spent, total_orders, registration_date FROM users ORDER BY total_spent DESC')
     res = cursor.fetchall()
@@ -201,7 +206,7 @@ def get_all_users():
     return res
 
 def get_stats():
-    conn = sqlite3.connect('bot_database.db')
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute('SELECT COUNT(*) FROM users')
     total_users = cursor.fetchone()[0]
