@@ -134,8 +134,7 @@ def register_payment_handlers(dp: Dispatcher, bot: Bot):
             "📸 <b>Отправьте чек перевода</b>\n\n"
             "В подписи укажите сумму в USDT\n"
             "<i>Пример: 50 USDT TRC-20</i>",
-            reply_markup=back_kb("balance"),
-            parse_mode="HTML"
+            reply_markup=back_kb("balance"), parse_mode="HTML"
         )
         await state.set_state(PaymentStates.waiting_deposit_crypto_proof)
 
@@ -153,7 +152,7 @@ def register_payment_handlers(dp: Dispatcher, bot: Bot):
                 except:
                     pass
         
-        usd_rate = float(get_config('usd_to_uah') or USD_TO_UAH)
+        usd_rate = float(await get_config('usd_to_uah') or USD_TO_UAH)
         amount_uah = amount_usdt * usd_rate if amount_usdt else 0
         
         bonus = get_deposit_bonus(amount_uah=amount_uah)
@@ -178,8 +177,7 @@ def register_payment_handlers(dp: Dispatcher, bot: Bot):
             f"✅ <b>Чек отправлен!</b>\n\n"
             f"💰 Сумма к зачислению: {total:.0f} грн\n\n"
             f"⏱ Ожидайте зачисления средств",
-            reply_markup=main_menu_kb(),
-            parse_mode="HTML"
+            reply_markup=main_menu_kb(), parse_mode="HTML"
         )
         await state.clear()
 
@@ -198,8 +196,7 @@ def register_payment_handlers(dp: Dispatcher, bot: Bot):
             "📸 <b>Отправьте чек перевода</b>\n\n"
             "В подписи укажите сумму в грн\n"
             "<i>Пример: 500 грн</i>",
-            reply_markup=back_kb("balance"),
-            parse_mode="HTML"
+            reply_markup=back_kb("balance"), parse_mode="HTML"
         )
         await state.set_state(PaymentStates.waiting_deposit_card_proof)
 
@@ -242,8 +239,7 @@ def register_payment_handlers(dp: Dispatcher, bot: Bot):
             f"✅ <b>Чек отправлен!</b>\n\n"
             f"💰 Сумма к зачислению: {total:.0f} грн\n\n"
             f"⏱ Ожидайте зачисления средств",
-            reply_markup=main_menu_kb(),
-            parse_mode="HTML"
+            reply_markup=main_menu_kb(), parse_mode="HTML"
         )
         await state.clear()
 
@@ -262,28 +258,28 @@ def register_payment_handlers(dp: Dispatcher, bot: Bot):
     async def pay_from_balance(callback: types.CallbackQuery, state: FSMContext):
         data = await state.get_data()
         user_id = callback.from_user.id
-        balance, ref_id, total_spent, _ = get_user(user_id)
+        balance, ref_id, total_spent, _ = await get_user(user_id)
         total_with_discount = data.get('final_amount', 0)
-        test_mode = get_config('test_mode') == 'True'
+        test_mode = await get_config('test_mode') == 'True'
         
         if balance < total_with_discount and not test_mode:
             await callback.answer("❌ Недостаточно средств!", show_alert=True)
             return
         
-        order_id = add_order(
+        order_id = await add_order(
             user_id, data['link'], data.get('topic', '—'),
             data.get('geo'), data.get('sex'), data.get('age'), data.get('has_avatar'),
             data['count'], total_with_discount, 'pending'
         )
         
         if not test_mode:
-            update_balance(user_id, -total_with_discount)
-        update_user_stats(user_id, total_with_discount)
+            await update_balance(user_id, -total_with_discount)
+        await update_user_stats(user_id, total_with_discount)
         
         if ref_id and not test_mode:
-            ref_percent = float(get_config('ref_percent') or 0.15)
+            ref_percent = float(await get_config('ref_percent') or 0.15)
             bonus = total_with_discount * ref_percent
-            update_balance(ref_id, bonus)
+            await update_balance(ref_id, bonus)
             try:
                 await bot.send_message(ref_id, f"💰 Реферальный бонус +{bonus:.2f} грн!")
             except:
@@ -304,7 +300,7 @@ def register_payment_handlers(dp: Dispatcher, bot: Bot):
         )
         
         admin_msg = await bot.send_message(ADMIN_ID, admin_text, reply_markup=builder.as_markup(), parse_mode="HTML")
-        update_order_admin_msg(order_id, admin_msg.message_id)
+        await update_order_admin_msg(order_id, admin_msg.message_id)
         
         await callback.message.edit_text(
             f"✅ <b>Заказ #{order_id} оплачен!</b>\n\n"
@@ -320,10 +316,10 @@ def register_payment_handlers(dp: Dispatcher, bot: Bot):
     async def pay_crypto(callback: types.CallbackQuery, state: FSMContext):
         data = await state.get_data()
         total = data.get('final_amount', 0)
-        usd_rate = float(get_config('usd_to_uah') or USD_TO_UAH)
+        usd_rate = float(await get_config('usd_to_uah') or USD_TO_UAH)
         amount_usdt = round(total / usd_rate, 2)
         
-        order_id = add_order(
+        order_id = await add_order(
             callback.from_user.id, data['link'], data.get('topic', '—'),
             data.get('geo'), data.get('sex'), data.get('age'), data.get('has_avatar'),
             data['count'], total, 'pending_payment'
@@ -368,14 +364,14 @@ def register_payment_handlers(dp: Dispatcher, bot: Bot):
             await state.clear()
             return
         
-        order = get_order(order_id)
+        order = await get_order(order_id)
         if not order:
             await message.answer("❌ Заказ не найден!")
             await state.clear()
             return
         
         photo_id = message.photo[-1].file_id
-        update_order_proof(order_id, photo_id)
+        await update_order_proof(order_id, photo_id)
         
         admin_text = (
             f"<b>🆕 ЗАКАЗ #{order_id} (оплата USDT)</b>\n\n"
@@ -403,7 +399,7 @@ def register_payment_handlers(dp: Dispatcher, bot: Bot):
         data = await state.get_data()
         total = data.get('final_amount', 0)
         
-        order_id = add_order(
+        order_id = await add_order(
             callback.from_user.id, data['link'], data.get('topic', '—'),
             data.get('geo'), data.get('sex'), data.get('age'), data.get('has_avatar'),
             data['count'], total, 'pending_payment'
@@ -447,14 +443,14 @@ def register_payment_handlers(dp: Dispatcher, bot: Bot):
             await state.clear()
             return
         
-        order = get_order(order_id)
+        order = await get_order(order_id)
         if not order:
             await message.answer("❌ Заказ не найден!")
             await state.clear()
             return
         
         photo_id = message.photo[-1].file_id
-        update_order_proof(order_id, photo_id)
+        await update_order_proof(order_id, photo_id)
         
         admin_text = (
             f"<b>🆕 ЗАКАЗ #{order_id} (оплата картой)</b>\n\n"
