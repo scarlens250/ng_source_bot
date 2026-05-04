@@ -6,14 +6,17 @@ from datetime import datetime
 import sqlite3
 
 from config import MIN_ORDER_COUNT, MAX_ORDER_COUNT, MIN_DEPOSIT_UAH, MIN_DEPOSIT_USDT
-from database import get_user, is_blocked, get_user_orders, get_order_stats, get_config
+from database import (
+    get_user, update_balance, update_user_stats, is_blocked,
+    get_user_orders, get_order_stats, get_config
+)
 from keyboards import main_menu_kb, back_kb, deposit_methods_kb
 
 def register_user_handlers(dp: Dispatcher, bot: Bot):
     
     @dp.message(CommandStart())
     async def start_handler(message: types.Message):
-        if is_blocked(message.from_user.id):
+        if await is_blocked(message.from_user.id):
             await message.answer("🚫 <b>Ваш аккаунт заблокирован!</b>", parse_mode="HTML")
             return
         
@@ -31,7 +34,7 @@ def register_user_handlers(dp: Dispatcher, bot: Bot):
         conn.commit()
         conn.close()
         
-        balance, _, total_spent, total_orders = get_user(message.from_user.id)
+        balance, _, total_spent, total_orders = await get_user(message.from_user.id)
         
         await message.answer(
             f"<b>🚀 Добро пожаловать в N-G SOURCE!</b>\n\n"
@@ -67,7 +70,7 @@ def register_user_handlers(dp: Dispatcher, bot: Bot):
 
     @dp.callback_query(F.data == "balance")
     async def balance_handler(callback: types.CallbackQuery):
-        balance, _, _, _ = get_user(callback.from_user.id)
+        balance, _, _, _ = await get_user(callback.from_user.id)
         
         await callback.message.edit_text(
             f"<b>💰 Мой баланс</b>\n\n"
@@ -86,9 +89,9 @@ def register_user_handlers(dp: Dispatcher, bot: Bot):
 
     @dp.callback_query(F.data == "stats")
     async def stats_handler(callback: types.CallbackQuery):
-        orders = get_user_orders(callback.from_user.id)
-        orders_count, total_amount = get_order_stats(callback.from_user.id)
-        balance, _, total_spent, _ = get_user(callback.from_user.id)
+        orders = await get_user_orders(callback.from_user.id)
+        orders_count, total_amount = await get_order_stats(callback.from_user.id)
+        balance, _, total_spent, _ = await get_user(callback.from_user.id)
         
         status_counts = {'pending': 0, 'approved': 0, 'rejected': 0, 'completed': 0}
         for order in orders:
@@ -109,7 +112,7 @@ def register_user_handlers(dp: Dispatcher, bot: Bot):
 
     @dp.callback_query(F.data == "my_orders")
     async def my_orders_handler(callback: types.CallbackQuery):
-        orders = get_user_orders(callback.from_user.id)
+        orders = await get_user_orders(callback.from_user.id)
         
         if not orders:
             await callback.message.edit_text(
@@ -151,7 +154,7 @@ def register_user_handlers(dp: Dispatcher, bot: Bot):
 
     @dp.callback_query(F.data == "test_mode_info")
     async def test_mode_info(callback: types.CallbackQuery):
-        test_mode = get_config('test_mode') == 'True'
+        test_mode = await get_config('test_mode') == 'True'
         await callback.message.edit_text(
             f"<b>🧪 Тестовый режим: {'ВКЛЮЧЁН' if test_mode else 'ВЫКЛЮЧЕН'}</b>\n\n"
             f"• Деньги {'НЕ' if test_mode else ''} списываются с баланса\n"
@@ -163,7 +166,7 @@ def register_user_handlers(dp: Dispatcher, bot: Bot):
     @dp.callback_query(F.data == "main_menu")
     async def to_main_menu(callback: types.CallbackQuery, state: FSMContext):
         await state.clear()
-        balance, _, total_spent, total_orders = get_user(callback.from_user.id)
+        balance, _, total_spent, total_orders = await get_user(callback.from_user.id)
         
         await callback.message.edit_text(
             f"<b>🚀 N-G SOURCE</b>\n\n"
