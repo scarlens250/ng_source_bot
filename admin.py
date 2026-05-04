@@ -9,7 +9,6 @@ import asyncio
 from datetime import datetime
 import shutil
 
-# Состояния для админки
 class AdminStates(StatesGroup):
     waiting_broadcast = State()
     waiting_user_search = State()
@@ -20,108 +19,69 @@ class AdminStates(StatesGroup):
     waiting_filter_price = State()
     waiting_test_balance = State()
 
-# Вспомогательные функции для админки
+# Вспомогательные функции (синхронные, работают с БД через database.py)
+from database import (
+    get_config as db_get_config,
+    set_config as db_set_config,
+    get_all_users as db_get_all_users,
+    update_balance as db_update_balance,
+    set_balance as db_set_balance,
+    get_stats as db_get_stats,
+    get_user_info as db_get_user_info,
+    is_blocked as db_is_blocked,
+    block_user as db_block_user
+)
+
+# Обёртки для синхронного вызова в админке (админка пока синхронная)
 def get_config(key):
-    conn = sqlite3.connect('bot_database.db')
-    cursor = conn.cursor()
-    cursor.execute('SELECT value FROM config WHERE key = ?', (key,))
-    res = cursor.fetchone()
-    conn.close()
-    return res[0] if res else None
+    return asyncio.run(db_get_config(key))
 
 def set_config(key, value):
-    conn = sqlite3.connect('bot_database.db')
-    cursor = conn.cursor()
-    cursor.execute('UPDATE config SET value = ?, updated_at = ? WHERE key = ?',
-                   (str(value), datetime.now().isoformat(), key))
-    conn.commit()
-    conn.close()
+    return asyncio.run(db_set_config(key, value))
 
 def get_all_users():
-    conn = sqlite3.connect('bot_database.db')
-    cursor = conn.cursor()
-    cursor.execute('SELECT user_id, username, balance, total_spent, total_orders, registration_date FROM users ORDER BY total_spent DESC')
-    res = cursor.fetchall()
-    conn.close()
-    return res
+    return asyncio.run(db_get_all_users())
 
 def update_balance(user_id, amount):
-    conn = sqlite3.connect('bot_database.db')
-    cursor = conn.cursor()
-    cursor.execute('UPDATE users SET balance = balance + ? WHERE user_id = ?', (amount, user_id))
-    conn.commit()
-    conn.close()
+    return asyncio.run(db_update_balance(user_id, amount))
 
 def set_balance(user_id, amount):
-    conn = sqlite3.connect('bot_database.db')
-    cursor = conn.cursor()
-    cursor.execute('UPDATE users SET balance = ? WHERE user_id = ?', (amount, user_id))
-    conn.commit()
-    conn.close()
+    return asyncio.run(db_set_balance(user_id, amount))
 
 def get_stats():
-    conn = sqlite3.connect('bot_database.db')
-    cursor = conn.cursor()
-    cursor.execute('SELECT COUNT(*) FROM users')
-    total_users = cursor.fetchone()[0]
-    cursor.execute('SELECT COUNT(*) FROM orders')
-    total_orders = cursor.fetchone()[0]
-    cursor.execute('SELECT COALESCE(SUM(amount), 0) FROM orders WHERE status IN ("approved", "completed")')
-    total_volume = cursor.fetchone()[0]
-    cursor.execute('SELECT COALESCE(AVG(amount), 0) FROM orders WHERE status IN ("approved", "completed")')
-    avg_order = cursor.fetchone()[0]
-    cursor.execute('SELECT COUNT(*) FROM orders WHERE status = "pending"')
-    pending_orders = cursor.fetchone()[0]
-    conn.close()
-    return total_users, total_orders, total_volume, avg_order, pending_orders
+    return asyncio.run(db_get_stats())
+
+def get_user_info(user_id):
+    return asyncio.run(db_get_user_info(user_id))
+
+def is_blocked(user_id):
+    return asyncio.run(db_is_blocked(user_id))
+
+def block_user(user_id, blocked=True):
+    return asyncio.run(db_block_user(user_id, blocked))
 
 def get_all_orders(limit=50, status=None):
+    import sqlite3
     conn = sqlite3.connect('bot_database.db')
     cursor = conn.cursor()
     if status:
-        cursor.execute('''SELECT order_id, user_id, link, channel_name, count, amount, status, date 
+        cursor.execute('''SELECT order_id, user_id, link, count, amount, status, date 
                           FROM orders WHERE status = ? ORDER BY date DESC LIMIT ?''', (status, limit))
     else:
-        cursor.execute('''SELECT order_id, user_id, link, channel_name, count, amount, status, date 
+        cursor.execute('''SELECT order_id, user_id, link, count, amount, status, date 
                           FROM orders ORDER BY date DESC LIMIT ?''', (limit,))
     res = cursor.fetchall()
     conn.close()
     return res
 
 def update_order_status(order_id, status, admin_id=None):
+    import sqlite3
     conn = sqlite3.connect('bot_database.db')
     cursor = conn.cursor()
     cursor.execute('''UPDATE orders SET status = ?, moderated_at = ?, moderated_by = ? WHERE order_id = ?''',
                    (status, datetime.now().isoformat(), admin_id, order_id))
     conn.commit()
     conn.close()
-
-def get_user_info(user_id):
-    conn = sqlite3.connect('bot_database.db')
-    cursor = conn.cursor()
-    cursor.execute('SELECT user_id, username, balance, total_spent, total_orders, referrer_id, registration_date, last_activity FROM users WHERE user_id = ?', (user_id,))
-    res = cursor.fetchone()
-    conn.close()
-    return res
-
-def block_user(user_id, blocked=True):
-    conn = sqlite3.connect('bot_database.db')
-    cursor = conn.cursor()
-    cursor.execute('''CREATE TABLE IF NOT EXISTS blocked_users (user_id INTEGER PRIMARY KEY)''')
-    if blocked:
-        cursor.execute('INSERT OR IGNORE INTO blocked_users (user_id) VALUES (?)', (user_id,))
-    else:
-        cursor.execute('DELETE FROM blocked_users WHERE user_id = ?', (user_id,))
-    conn.commit()
-    conn.close()
-
-def is_blocked(user_id):
-    conn = sqlite3.connect('bot_database.db')
-    cursor = conn.cursor()
-    cursor.execute('SELECT user_id FROM blocked_users WHERE user_id = ?', (user_id,))
-    res = cursor.fetchone()
-    conn.close()
-    return res is not None
 
 # Клавиатуры админки
 def admin_kb():
@@ -171,7 +131,6 @@ def back_kb(callback_data="admin_panel"):
     builder.row(types.InlineKeyboardButton(text="◀️ Назад", callback_data=callback_data))
     return builder.as_markup()
 
-# Регистрация всех админ-обработчиков
 def register_admin_handlers(dp, ADMIN_ID):
     
     @dp.message(Command("admin"))
@@ -201,70 +160,59 @@ def register_admin_handlers(dp, ADMIN_ID):
         )
         await message.answer(text, reply_markup=admin_kb(), parse_mode="HTML")
 
-    # ========== КОМАНДА /pay ==========
     @dp.message(Command("pay"))
     async def admin_pay(message: types.Message):
         if message.from_user.id != ADMIN_ID:
             return
-        
         args = message.text.split()
         if len(args) != 3:
-            await message.answer("❌ Использование: /pay ID СУММА\nПример: /pay 123456789 100")
+            await message.answer("❌ /pay ID СУММА")
             return
-        
         try:
             user_id = int(args[1])
             amount = float(args[2])
             update_balance(user_id, amount)
             await message.answer(f"✅ Начислено {amount:.2f} грн пользователю {user_id}")
             try:
-                await bot.send_message(user_id, f"💰 Ваш баланс пополнен на {amount:.2f} грн!")
+                await bot.send_message(user_id, f"💰 Баланс пополнен на {amount:.2f} грн!")
             except:
                 pass
-        except ValueError:
-            await message.answer("❌ Ошибка! ID и сумма должны быть числами")
+        except:
+            await message.answer("❌ Ошибка")
 
-    # ========== КОМАНДА /setbal ==========
     @dp.message(Command("setbal"))
     async def admin_setbal(message: types.Message):
         if message.from_user.id != ADMIN_ID:
             return
-        
         args = message.text.split()
         if len(args) != 3:
-            await message.answer("❌ Использование: /setbal ID СУММА\nПример: /setbal 123456789 500")
+            await message.answer("❌ /setbal ID СУММА")
             return
-        
         try:
             user_id = int(args[1])
             amount = float(args[2])
             set_balance(user_id, amount)
             await message.answer(f"✅ Установлен баланс {amount:.2f} грн пользователю {user_id}")
             try:
-                await bot.send_message(user_id, f"💰 Ваш баланс установлен на {amount:.2f} грн администратором!")
+                await bot.send_message(user_id, f"💰 Баланс установлен на {amount:.2f} грн!")
             except:
                 pass
-        except ValueError:
-            await message.answer("❌ Ошибка! ID и сумма должны быть числами")
+        except:
+            await message.answer("❌ Ошибка")
 
-    # ========== КОМАНДА /users ==========
     @dp.message(Command("users"))
     async def admin_users_list(message: types.Message):
         if message.from_user.id != ADMIN_ID:
             return
-        
         users = get_all_users()
         if not users:
             await message.answer("❌ Пользователей пока нет")
             return
-        
         text = "<b>👥 Список пользователей</b>\n\n"
         for user in users[:20]:
             text += f"🆔 {user[0]} | @{user[1] or '—'} | 💰 {user[2]:.0f} грн | 💸 {user[3]:.0f} грн\n"
-        
         if len(users) > 20:
             text += f"\n<i>... и ещё {len(users) - 20} пользователей</i>"
-        
         await message.answer(text, parse_mode="HTML")
 
     @dp.callback_query(F.data == "admin_panel")
@@ -283,7 +231,6 @@ def register_admin_handlers(dp, ADMIN_ID):
         )
         await callback.message.edit_text(text, reply_markup=admin_kb(), parse_mode="HTML")
 
-    # Пользователи
     @dp.callback_query(F.data == "admin_users")
     async def admin_users(callback: types.CallbackQuery):
         if callback.from_user.id != ADMIN_ID:
@@ -392,15 +339,9 @@ def register_admin_handlers(dp, ADMIN_ID):
             user_id = data.get('target_user_id')
             if user_id:
                 set_balance(user_id, amount)
-                try:
-                    await bot.send_message(user_id, f"💰 Администратор установил ваш баланс: {amount:.2f} грн")
-                except:
-                    pass
                 await message.answer(f"✅ Баланс пользователя {user_id} установлен: {amount:.2f} грн", reply_markup=admin_users_kb())
-        except ValueError:
-            await message.answer("❌ Ошибка! Введите число (например: 1000 или 500.50)", reply_markup=admin_users_kb())
-        except Exception as e:
-            await message.answer(f"❌ Ошибка: {e}", reply_markup=admin_users_kb())
+        except:
+            await message.answer("❌ Ошибка! Введите число", reply_markup=admin_users_kb())
         await state.clear()
 
     @dp.callback_query(F.data.startswith("admin_toggle_block_"))
@@ -413,7 +354,6 @@ def register_admin_handlers(dp, ADMIN_ID):
         await callback.answer(f"✅ {'Заблокирован' if blocked else 'Разблокирован'}!", show_alert=True)
         await admin_find_user(callback, AdminStates.waiting_user_search)
 
-    # Настройки
     @dp.callback_query(F.data == "admin_settings")
     async def admin_settings(callback: types.CallbackQuery):
         if callback.from_user.id != ADMIN_ID:
@@ -555,7 +495,6 @@ def register_admin_handlers(dp, ADMIN_ID):
             await message.answer("❌ Ошибка! От 0 до 100000", reply_markup=admin_settings_kb())
         await state.clear()
 
-    # Статистика
     @dp.callback_query(F.data == "admin_stats")
     async def admin_stats(callback: types.CallbackQuery):
         if callback.from_user.id != ADMIN_ID:
@@ -575,7 +514,6 @@ def register_admin_handlers(dp, ADMIN_ID):
         )
         await callback.message.edit_text(text, reply_markup=back_kb(), parse_mode="HTML")
 
-    # Заказы
     @dp.callback_query(F.data == "admin_orders")
     async def admin_orders_menu(callback: types.CallbackQuery):
         if callback.from_user.id != ADMIN_ID:
@@ -612,7 +550,6 @@ def register_admin_handlers(dp, ADMIN_ID):
         builder.row(types.InlineKeyboardButton(text="◀️ Назад", callback_data="admin_orders"))
         await callback.message.edit_text(text, reply_markup=builder.as_markup(), parse_mode="HTML")
 
-    # Рассылка
     @dp.callback_query(F.data == "admin_broadcast")
     async def admin_broadcast(callback: types.CallbackQuery, state: FSMContext):
         if callback.from_user.id != ADMIN_ID:
@@ -644,7 +581,6 @@ def register_admin_handlers(dp, ADMIN_ID):
         await status_msg.edit_text(f"✅ Рассылка: {success}/{len(users)}", reply_markup=admin_kb())
         await state.clear()
 
-    # Бэкап
     @dp.callback_query(F.data == "admin_backup")
     async def admin_backup(callback: types.CallbackQuery):
         if callback.from_user.id != ADMIN_ID:
