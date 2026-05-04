@@ -6,6 +6,7 @@ from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 
 from config import ADMIN_ID
+from database import init_db  # <--- ДОБАВИТЬ ЭТУ СТРОКУ
 from handlers import register_handlers
 from admin import register_admin_handlers
 
@@ -22,6 +23,9 @@ register_handlers(dp, bot)
 register_admin_handlers(dp, ADMIN_ID)
 
 async def main():
+    # Инициализируем базу данных PostgreSQL
+    await init_db()  # <--- ДОБАВИТЬ ЭТУ СТРОКУ
+    
     print("=" * 50)
     print("🚀 N-G SOURCE БОТ ЗАПУЩЕН НА ХОСТИНГЕ")
     print(f"👤 Админ ID: {ADMIN_ID}")
