@@ -79,10 +79,10 @@ def get_all_orders(limit=50, status=None):
     conn = sqlite3.connect('bot_database.db')
     cursor = conn.cursor()
     if status:
-        cursor.execute('''SELECT order_id, user_id, link, count, amount, status, date 
+        cursor.execute('''SELECT order_id, user_id, link, channel_name, count, amount, status, date 
                           FROM orders WHERE status = ? ORDER BY date DESC LIMIT ?''', (status, limit))
     else:
-        cursor.execute('''SELECT order_id, user_id, link, count, amount, status, date 
+        cursor.execute('''SELECT order_id, user_id, link, channel_name, count, amount, status, date 
                           FROM orders ORDER BY date DESC LIMIT ?''', (limit,))
     res = cursor.fetchall()
     conn.close()
@@ -95,14 +95,6 @@ def update_order_status(order_id, status, admin_id=None):
                    (status, datetime.now().isoformat(), admin_id, order_id))
     conn.commit()
     conn.close()
-
-def get_order(order_id):
-    conn = sqlite3.connect('bot_database.db')
-    cursor = conn.cursor()
-    cursor.execute('SELECT * FROM orders WHERE order_id = ?', (order_id,))
-    res = cursor.fetchone()
-    conn.close()
-    return res
 
 def get_user_info(user_id):
     conn = sqlite3.connect('bot_database.db')
@@ -209,6 +201,72 @@ def register_admin_handlers(dp, ADMIN_ID):
         )
         await message.answer(text, reply_markup=admin_kb(), parse_mode="HTML")
 
+    # ========== КОМАНДА /pay ==========
+    @dp.message(Command("pay"))
+    async def admin_pay(message: types.Message):
+        if message.from_user.id != ADMIN_ID:
+            return
+        
+        args = message.text.split()
+        if len(args) != 3:
+            await message.answer("❌ Использование: /pay ID СУММА\nПример: /pay 123456789 100")
+            return
+        
+        try:
+            user_id = int(args[1])
+            amount = float(args[2])
+            update_balance(user_id, amount)
+            await message.answer(f"✅ Начислено {amount:.2f} грн пользователю {user_id}")
+            try:
+                await bot.send_message(user_id, f"💰 Ваш баланс пополнен на {amount:.2f} грн!")
+            except:
+                pass
+        except ValueError:
+            await message.answer("❌ Ошибка! ID и сумма должны быть числами")
+
+    # ========== КОМАНДА /setbal ==========
+    @dp.message(Command("setbal"))
+    async def admin_setbal(message: types.Message):
+        if message.from_user.id != ADMIN_ID:
+            return
+        
+        args = message.text.split()
+        if len(args) != 3:
+            await message.answer("❌ Использование: /setbal ID СУММА\nПример: /setbal 123456789 500")
+            return
+        
+        try:
+            user_id = int(args[1])
+            amount = float(args[2])
+            set_balance(user_id, amount)
+            await message.answer(f"✅ Установлен баланс {amount:.2f} грн пользователю {user_id}")
+            try:
+                await bot.send_message(user_id, f"💰 Ваш баланс установлен на {amount:.2f} грн администратором!")
+            except:
+                pass
+        except ValueError:
+            await message.answer("❌ Ошибка! ID и сумма должны быть числами")
+
+    # ========== КОМАНДА /users ==========
+    @dp.message(Command("users"))
+    async def admin_users_list(message: types.Message):
+        if message.from_user.id != ADMIN_ID:
+            return
+        
+        users = get_all_users()
+        if not users:
+            await message.answer("❌ Пользователей пока нет")
+            return
+        
+        text = "<b>👥 Список пользователей</b>\n\n"
+        for user in users[:20]:
+            text += f"🆔 {user[0]} | @{user[1] or '—'} | 💰 {user[2]:.0f} грн | 💸 {user[3]:.0f} грн\n"
+        
+        if len(users) > 20:
+            text += f"\n<i>... и ещё {len(users) - 20} пользователей</i>"
+        
+        await message.answer(text, parse_mode="HTML")
+
     @dp.callback_query(F.data == "admin_panel")
     async def admin_panel_callback(callback: types.CallbackQuery):
         if callback.from_user.id != ADMIN_ID:
@@ -294,17 +352,16 @@ def register_admin_handlers(dp, ADMIN_ID):
         await state.clear()
 
     @dp.callback_query(F.data.startswith("admin_add_100_"))
-    async def admin_add_100(callback: types.CallbackQuery):
+    async def admin_add_100(callback: types.CallbackQuery, state: FSMContext):
         if callback.from_user.id != ADMIN_ID:
             return
         user_id = int(callback.data.split("_")[3])
         update_balance(user_id, 100)
         await callback.answer("✅ +100 грн!", show_alert=True)
-        # Возвращаемся к поиску
         await admin_find_user(callback, AdminStates.waiting_user_search)
 
     @dp.callback_query(F.data.startswith("admin_sub_100_"))
-    async def admin_sub_100(callback: types.CallbackQuery):
+    async def admin_sub_100(callback: types.CallbackQuery, state: FSMContext):
         if callback.from_user.id != ADMIN_ID:
             return
         user_id = int(callback.data.split("_")[3])
@@ -549,8 +606,8 @@ def register_admin_handlers(dp, ADMIN_ID):
             return
         text = f"<b>{status_map.get(status_key, 'Заказы')} ({len(orders)})</b>\n\n"
         for order in orders:
-            emoji = {'pending': '⏳', 'approved': '✅', 'rejected': '❌', 'completed': '🎉'}.get(order[5], '❓')
-            text += f"{emoji} #{order[0]} | {order[3]} шт | {order[4]:.0f} грн\n   👤 {order[1]}\n\n"
+            emoji = {'pending': '⏳', 'approved': '✅', 'rejected': '❌', 'completed': '🎉'}.get(order[6], '❓')
+            text += f"{emoji} #{order[0]} | {order[4]} шт | {order[5]:.0f} грн\n   👤 {order[1]}\n\n"
         builder = InlineKeyboardBuilder()
         builder.row(types.InlineKeyboardButton(text="◀️ Назад", callback_data="admin_orders"))
         await callback.message.edit_text(text, reply_markup=builder.as_markup(), parse_mode="HTML")
