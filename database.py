@@ -1,4 +1,4 @@
-# database.py - PostgreSQL версия
+# database.py
 import asyncpg
 import os
 from datetime import datetime
@@ -95,6 +95,16 @@ async def get_user(user_id):
         if row:
             return (row['balance'], row['referrer_id'], row['total_spent'], row['total_orders'])
         return (0, None, 0, 0)
+
+async def get_user_info(user_id):
+    """Полная информация о пользователе для админки"""
+    async with db_pool.acquire() as conn:
+        row = await conn.fetchrow('''
+            SELECT user_id, username, balance, total_spent, total_orders, 
+                   referrer_id, registration_date, last_activity 
+            FROM users WHERE user_id = $1
+        ''', user_id)
+        return row
 
 async def update_balance(user_id, amount):
     async with db_pool.acquire() as conn:
