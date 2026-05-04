@@ -16,8 +16,11 @@ class OrderStates(StatesGroup):
     waiting_for_payment = State()
 
 def get_current_price(data):
-    filter_price = float(get_config('filter_surcharge') or 0.5)
-    base_price = float(get_config('base_price') or 2.0)
+    return 2.0, 100  # временно, потом исправим
+
+async def get_current_price_async(data):
+    filter_price = float(await get_config('filter_surcharge') or 0.5)
+    base_price = float(await get_config('base_price') or 2.0)
     
     surcharge = 0
     if data.get('geo') != "🌍 Любой":
@@ -114,7 +117,7 @@ def register_order_handlers(dp: Dispatcher):
 
     async def show_filters(message, state: FSMContext):
         data = await state.get_data()
-        unit_p, total = get_current_price(data)
+        unit_p, total = await get_current_price_async(data)
         
         builder = filter_kb(
             data.get('geo', '🌍 Любой'), 
@@ -136,7 +139,7 @@ def register_order_handlers(dp: Dispatcher):
             f"  👤 Пол: {data.get('sex', '👥 Любой')}\n"
             f"  🎂 Возраст: {data.get('age', '👥 Любой')}\n"
             f"  🖼️ Аватар: {data.get('has_avatar', '🖼️ Любой')}\n\n"
-            f"<i>Каждый выбранный фильтр добавляет +{get_config('filter_surcharge') or 0.5} грн</i>\n\n"
+            f"<i>Каждый выбранный фильтр добавляет +{await get_config('filter_surcharge') or 0.5} грн</i>\n\n"
             f"Нажмите на фильтр чтобы изменить 👇"
         )
         
@@ -198,8 +201,8 @@ def register_order_handlers(dp: Dispatcher):
     @dp.callback_query(F.data == "continue_to_price")
     async def continue_to_price(callback: types.CallbackQuery, state: FSMContext):
         data = await state.get_data()
-        balance, _, _, _ = get_user(callback.from_user.id)
-        unit_p, total = get_current_price(data)
+        balance, _, _, _ = await get_user(callback.from_user.id)
+        unit_p, total = await get_current_price_async(data)
         
         await state.update_data(
             link=data.get('link'),

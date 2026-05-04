@@ -14,13 +14,13 @@ def register_moderation_handlers(dp: Dispatcher, bot: Bot):
             return
         
         order_id = int(callback.data.split("_")[2])
-        order = get_order(order_id)
+        order = await get_order(order_id)
         
         if not order:
             await callback.answer("❌ Заказ не найден!", show_alert=True)
             return
         
-        update_order_status(order_id, "approved", ADMIN_ID)
+        await update_order_status(order_id, "approved", ADMIN_ID)
         
         await bot.send_message(
             order[1],
@@ -31,7 +31,6 @@ def register_moderation_handlers(dp: Dispatcher, bot: Bot):
             parse_mode="HTML"
         )
         
-        # Отправляем НОВОЕ сообщение админу с кнопкой "Выполнено"
         complete_builder = InlineKeyboardBuilder()
         complete_builder.row(types.InlineKeyboardButton(text="🎉 Выполнено", callback_data=f"complete_{order_id}"))
         
@@ -49,10 +48,8 @@ def register_moderation_handlers(dp: Dispatcher, bot: Bot):
             parse_mode="HTML"
         )
         
-        # Сохраняем ID нового сообщения
-        update_order_admin_msg(order_id, new_msg.message_id)
+        await update_order_admin_msg(order_id, new_msg.message_id)
         
-        # Архивируем старое сообщение
         if order[12]:
             try:
                 old_builder = InlineKeyboardBuilder()
@@ -74,13 +71,13 @@ def register_moderation_handlers(dp: Dispatcher, bot: Bot):
             return
         
         order_id = int(callback.data.split("_")[1])
-        order = get_order(order_id)
+        order = await get_order(order_id)
         
         if not order:
             await callback.answer("❌ Заказ не найден!", show_alert=True)
             return
         
-        update_order_status(order_id, "completed", ADMIN_ID)
+        await update_order_status(order_id, "completed", ADMIN_ID)
         
         await bot.send_message(
             order[1],
@@ -112,17 +109,17 @@ def register_moderation_handlers(dp: Dispatcher, bot: Bot):
             return
         
         order_id = int(callback.data.split("_")[3])
-        order = get_order(order_id)
+        order = await get_order(order_id)
         
         if not order:
             await callback.answer("❌ Заказ не найден!", show_alert=True)
             return
         
-        test_mode = get_config('test_mode') == 'True'
-        update_order_status(order_id, "rejected", ADMIN_ID)
+        test_mode = await get_config('test_mode') == 'True'
+        await update_order_status(order_id, "rejected", ADMIN_ID)
         
         if not test_mode:
-            update_balance(order[1], order[9])
+            await update_balance(order[1], order[9])
             money_text = f"💰 Деньги в сумме {order[9]:.2f} грн возвращены."
         else:
             money_text = "🧪 Тестовый режим."
@@ -159,13 +156,13 @@ def register_moderation_handlers(dp: Dispatcher, bot: Bot):
             return
         
         order_id = int(callback.data.split("_")[2])
-        order = get_order(order_id)
+        order = await get_order(order_id)
         
         if not order:
             await callback.answer("❌ Заказ не найден!", show_alert=True)
             return
         
-        update_order_status(order_id, "rejected", ADMIN_ID)
+        await update_order_status(order_id, "rejected", ADMIN_ID)
         
         await bot.send_message(
             order[1],
